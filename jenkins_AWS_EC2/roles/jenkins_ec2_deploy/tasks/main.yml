@@ -1,0 +1,213 @@
+---
+
+# E: Unable to acquire the dpkg frontend lock (/var/lib/dpkg/lock-frontend), 
+# is another process using it?
+# release process lock
+- name: release process lock 1
+  raw: 'sudo rm /var/cache/apt/archives/lock'
+- name: release process lock 2
+  raw: 'sudo rm /var/lib/dpkg/lock-frontend'
+- name: release process lock 3
+  raw: 'sudo rm /var/lib/dpkg/lock'
+- name: release lock
+  raw: 'sudo rm /var/lib/apt/lists/lock '
+
+# in order to use apt
+- name: clean apt-get
+  raw: 'sudo apt-get clean'
+
+- name: update apt-get
+  command: 'sudo apt-get update'
+
+- name: update apt-get again
+  command: 'sudo apt-get update'
+
+# - name: release process lock 1
+#   raw: 'sudo rm /var/cache/apt/archives/lock'
+# # - name: release process lock 2
+# #   raw: 'sudo rm /var/lib/dpkg/lock-frontend'
+# - name: release process lock 3
+#   raw: 'sudo rm /var/lib/dpkg/lock'
+# - name: release lock
+#   raw: 'sudo rm /var/lib/apt/lists/lock '
+
+- name: install python
+  raw: 'sudo apt-get -y install python'
+
+# update all package
+- name: Update all packages to their latest version
+  apt:
+    name: "*"
+    state: latest
+
+- name: install apache2
+  apt:
+    name: apache2
+    state: latest
+
+- name: Install openjdk-8
+  apt:
+    name: openjdk-8-jdk
+    state: latest
+    install_recommends: no
+
+# install jenkins
+- name: ensure the jenkins apt repository key is installed
+  apt_key: 
+    url=https://pkg.jenkins.io/debian-stable/jenkins.io.key 
+    state=present
+  become: yes
+
+- name: ensure the repository is configured
+  apt_repository: 
+    repo='deb https://pkg.jenkins.io/debian-stable binary/' 
+    state=present
+  become: yes
+
+- name: ensure jenkins is installed
+  apt: 
+    name=jenkins 
+    update_cache=yes
+  become: yes
+
+- name: Update all packages to their latest version
+  apt:
+    name: "*"
+    state: latest
+
+- name: ensure jenkins is running
+  service: 
+    name=jenkins 
+    state=started
+
+# - name: modify 755 for jenkins config file
+#   raw: 'sudo chmod 755 /etc/default/jenkins'
+
+# configure jenkins
+- name: create vhosts/jenkins in /var/www
+  raw: 'sudo mkdir -p /var/www/vhosts/jenkins'
+
+- name: remove jenkins config file
+  raw: 'sudo rm /etc/default/jenkins'
+
+- name: copy jenkins to /etc/default/
+  copy:
+    src: ./jenkins
+    dest: /etc/default/jenkins
+    owner: root
+    group: root
+
+- name: restart jenkins
+  service: 
+    name=jenkins 
+    state=restarted
+
+# configure Let's Encrypt certification
+- name: install snapd
+  apt:
+    name: snapd
+    state: latest
+
+- name: install certbot
+  raw: 'sudo snap install --classic certbot'
+
+- name: create certification
+  shell: sudo certbot --apache certonly -d {{ domain }} -w /var/www/vhosts/jenkins --non-interactive --agree-tos -m cloud@northeastern.edu
+  
+
+# condigure apache2 for jenkins using https
+- name: copy jenkins-cert-renewal.conf to /etc/apache2/sites-available
+  copy:
+    src: ./jenkins-cert-renewal-{{ domain }}.conf
+    dest: /etc/apache2/sites-available/jenkins-cert-renewal.conf
+    owner: root
+    group: root
+
+- name: copy jenkins.conf to /etc/apache2/sites-available
+  copy:
+    src: ./jenkins-{{ domain }}.conf
+    dest: /etc/apache2/sites-available/jenkins.conf
+    owner: root
+    group: root
+
+- name: a2ensite jenkins-cert-renewal.conf
+  raw: 'sudo a2ensite jenkins-cert-renewal.conf'
+
+- name: enabled mod_rewrite
+  apache2_module: 
+    name=rewrite 
+    state=present
+
+- name: enabled mod_proxy_http
+  apache2_module: 
+    name=proxy_http 
+    state=present
+
+- name: enabled mod_ssl
+  apache2_module: 
+    name=ssl 
+    state=present
+
+- name: enabled mod_headers
+  apache2_module: 
+    name=headers
+    state=present
+
+- name: enabled mod_http2
+  apache2_module: 
+    name=http2
+    state=present
+
+- name: restart apache2
+  service: 
+    name=apache2 
+    state=restarted
+
+- name: a2dissite jenkins-cert-renewal.conf
+  raw: 'sudo a2dissite jenkins-cert-renewal.conf'
+
+- name: a2ensite jenkins.conf
+  raw: 'sudo a2ensite jenkins.conf'
+
+- name: restart apache2 again
+  service: 
+    name=apache2 
+    state=restarted
+
+- name:  fetch /var/lib/jenkins/secrets/initialAdminPassword to local
+  fetch:
+    src: /var/lib/jenkins/secrets/initialAdminPassword
+    dest: ./initialAdminPassword
+
+# - name: apt-get update
+#   raw: 'sudo apt-get update'
+
+# - name: Install required system packages
+#   apt: name={{ item }} state=latest update_cache=yes
+#   loop: [ 'apt-transport-https', 'ca-certificates', 'curl', 'gnupg-agent', 'software-properties-common']
+
+# - name: Add Docker GPG apt Key
+#   command: curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+
+# - name: fingerprint
+#   raw: 'sudo apt-key fingerprint 0EBFCD88'
+
+# - name: Add Docker Repository
+#   command: 'sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu bionic stable"'
+
+# - name: apt-get update
+#   raw: 'sudo apt-get update'
+
+# - name: install docker 
+#   raw: 'sudo apt-get install docker-ce docker-ce-cli containerd.io'
+
+# - name: configure docker for jenkins
+#   raw: 'sudo chmod 666 /var/run/docker.sock'
+
+  # handlers:
+  #   - name: restart apache2
+  #     service: 
+  #       name=apache2 
+  #       state=restarted
+  
+

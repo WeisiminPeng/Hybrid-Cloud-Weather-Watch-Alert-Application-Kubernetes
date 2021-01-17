@@ -1,0 +1,17 @@
+---
+- name: "Setup AWS Networking"
+  hosts: localhost
+  gather_facts: no
+  roles:
+  - networking-setup
+  # - networking-teardown
+
+- name: "Deploy Jenkins Instance"
+  hosts: jenkins
+  remote_user: ubuntu
+  # use sudo
+  become: yes
+  become_user: root
+  gather_facts: no
+  roles:
+  - jenkins_ec2_deploy

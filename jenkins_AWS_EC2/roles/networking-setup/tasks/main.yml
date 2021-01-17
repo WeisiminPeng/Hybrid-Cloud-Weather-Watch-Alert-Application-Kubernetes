@@ -1,0 +1,153 @@
+---
+- name: Create VPC for Jenkins
+  ec2_vpc_net:
+    state: present
+    region: "{{ aws_region }}"
+    name: "{{ vpc_name }}"
+    cidr_block: "{{ vpc_cidr }}"
+    dns_hostnames: yes
+    dns_support: yes
+    multi_ok: no
+    tenancy: default
+    profile: "{{ aws_profile }}"
+    tags:
+      Name: "jenkins"
+  register: jenkins_vpc
+
+- name: Create Internet Gateway
+  ec2_vpc_igw:
+    state: present
+    profile: "{{ aws_profile }}"
+    region: "{{ aws_region }}"
+    vpc_id: "{{ jenkins_vpc.vpc.id }}"
+    tags:
+      Name: "jenkins"
+  register: jenkins_igw
+
+- name: Create subnets
+  ec2_vpc_subnet:
+    state: present
+    profile: "{{ aws_profile }}"
+    region: "{{ aws_region }}"
+    az: "{{ item.value.az }}"
+    vpc_id: "{{ jenkins_vpc.vpc.id }}"
+    cidr: "{{ item.value.cidr }}"
+    tags:
+      Name: "jenkins_{{ item.value.az }}"
+  with_dict: "{{ vpc_subnets }}"
+  register: jenkins_vpc_subnets
+
+- name: Grab the route tables
+  ec2_vpc_route_table_facts:
+    profile: "{{ aws_profile }}"
+    region: "{{ aws_region }}"
+    filters:
+      vpc-id: "{{ jenkins_vpc.vpc.id }}"
+  register: jenkins_route_table
+
+- name: Update the route table in the vpc
+  ec2_vpc_route_table:
+    state: present
+    lookup: id
+    route_table_id: "{{ jenkins_route_table.route_tables[0].id }}"
+    vpc_id: "{{ jenkins_vpc.vpc.id}}"
+    profile: "{{ aws_profile }}"
+    region: "{{ aws_region }}"
+    tags:
+      Name: "jenkins_route_table_{{ jenkins_vpc.vpc.id }}"
+    subnets:
+        - "{{ jenkins_vpc_subnets.results[0].subnet.id }}"
+        - "{{ jenkins_vpc_subnets.results[1].subnet.id }}"
+    routes:
+      - dest: 0.0.0.0/0
+        gateway_id: "{{ jenkins_igw.gateway_id }}"
+  register: jenkins_route_table_updated
+
+- name: Create vpc security groups
+  ec2_group:
+    state: present
+    profile: "{{ aws_profile}}"
+    region: "{{ aws_region }}"
+    vpc_id: "{{ jenkins_vpc.vpc.id }}"
+    name: "jenkins_sg_{{ jenkins_vpc.vpc.id }}"
+    description: "jenkins security group for {{ jenkins_vpc.vpc.id }}"
+    rules:
+      - proto: tcp
+        from_port: 22
+        to_port: 22
+        cidr_ip: 0.0.0.0/0
+      - proto: tcp
+        from_port: 80
+        to_port: 80
+        cidr_ip: 0.0.0.0/0
+      - proto: tcp
+        from_port: 443
+        to_port: 443
+        cidr_ip: 0.0.0.0/0
+      - proto: tcp
+        from_port: 8080
+        to_port: 8080
+        cidr_ip: 0.0.0.0/0
+  register: jenkins_sg
+
+- name: Create and lanch instance
+  ec2:
+    profile: "{{ aws_profile }}"
+    region: "{{ aws_region }}"
+    key_name: "{{ keyName }}"
+    instance_type: t2.micro
+    image: ami-087d55a6d258497f3
+    wait: yes
+    vpc_subnet_id: "{{ jenkins_vpc_subnets.results[0].subnet.id }}"
+    group: "jenkins_sg_{{ jenkins_vpc.vpc.id }}"
+    exact_count: 1
+    count_tag: 
+      Name: jenkins_ec2
+      app: jenkins
+    volumes:
+      - device_name: /dev/sda1
+        volume_type: gp2
+        volume_size: 20
+        delete_on_termination: true
+    instance_tags:  
+          Name: jenkins_ec2
+          app: jenkins
+  register: jenkins_ec2
+
+- name: grab eip
+  ec2_eip_info:
+    profile: "{{ aws_profile }}"
+    region: "{{ aws_region }}"
+    filters:
+      "tag:Name": jenkins_elasticIP
+  register: jenkins_eip_ip
+
+
+- name: associate an existing elastic IP with instance
+  ec2_eip:
+    region: "{{ aws_region }}"
+    profile: "{{ aws_profile }}"
+    state: present
+    device_id: "{{ jenkins_ec2.tagged_instances[0].id }}"
+    ip: "{{ jenkins_eip_ip.addresses[0].public_ip }}"
+    # ip: 54.158.251.119
+  register: jenkins_eip
+
+- name: Add the newly created host so that we can further contact it
+  add_host:
+    name: "{{ jenkins_eip_ip.addresses[0].public_ip }}"
+    groups: jenkins
+    # list of instances
+  #   name: "{{ item.public_ip }}"
+  # with_items: "{{ ec2.instances }}"
+
+- name: Wait for SSH to come up
+  wait_for:
+    # host: "{{ jenkins_ec2.tagged_instances[0].public_dns_name }}"
+    host: "{{ jenkins_eip_ip.addresses[0].public_ip }}"
+    port: 22 
+    state: started
+      # with_items: "{{ ec2.instances }}"
+
+
+
