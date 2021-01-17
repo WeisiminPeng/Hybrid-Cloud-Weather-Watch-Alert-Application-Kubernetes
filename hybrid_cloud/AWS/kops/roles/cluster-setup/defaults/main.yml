@@ -1,0 +1,16 @@
+---
+# Default variable
+AWS_PROFILE: kops
+AWS_REGION: us-east-1
+NAME: none
+KOPS_STATE_STORE: "<s3 bucket>"
+COMPUTE_NODE_SIZE: t2.medium
+MASTER_NODE_SIZE: t2.medium
+VERSION: 1.19.0
+NODE_COUNT: 3
+DNS_ZONE: none
+SSH_KEY: <key>
+
+# Internal variable
+availability_zones: []
+zones_string: ""

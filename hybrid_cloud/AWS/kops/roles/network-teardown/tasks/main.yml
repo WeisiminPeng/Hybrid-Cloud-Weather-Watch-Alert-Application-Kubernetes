@@ -1,0 +1,14 @@
+---
+- name: Get VPC id
+  ec2_vpc_net_facts:
+    profile: "{{ rds_aws_profile }}"
+    region: "{{ aws_region }}"
+    filters:
+      "tag:Name": "{{ vpc_name }}"
+  register: rds_vpc_id
+
+
+- name: delete vpc
+  shell: ./delete_vpc.sh {{ aws_region }} {{ rds_vpc_id.vpcs[0].id }}
+  environment:
+    AWS_PROFILE: "{{ rds_aws_profile }}"

@@ -1,0 +1,123 @@
+---
+
+- name: Get k8s VPC id
+  ec2_vpc_net_info:
+    profile: "{{ prod_aws_profile }}"
+    region: "{{ aws_region }}"
+    filters:
+      "tag:Name": "{{ k8s_request_vpc_name }}"
+  register: k8s_request_vpc_id
+
+
+- name: Grab k8s VPC route tables
+  ec2_vpc_route_table_info:
+    profile: "{{ prod_aws_profile }}"
+    region: "{{ aws_region }}"
+    filters:
+      vpc-id: "{{ k8s_request_vpc_id.vpcs[0].id }}"
+      # "tag:KubernetesCluster": "{{ k8s_request_vpc_name }}"
+      # "association.main": "true"
+  register: k8s_route_table
+
+# - debug: var=k8s_route_table.route_tables
+
+# - name: Get all nat gateways with specific filters
+#   ec2_vpc_nat_gateway_info:
+#     profile: "{{ prod_aws_profile }}"
+#     region: "{{ aws_region }}"
+#     filters:
+#       "tag:KubernetesCluster": "{{ k8s_request_vpc_name }}"
+#   register: k8s_nat_gateway_info
+
+# - debug: var=k8s_nat_gateway_info
+
+- name: Get rds VPC id
+  ec2_vpc_net_info:
+    profile: "{{ rds_aws_profile }}"
+    region: "{{ aws_region }}"
+    filters:
+      "tag:Name": "{{ rds_accept_vpc_name }}"
+  register: rds_accept_vpc_id
+
+- name: Grab rds VPC route tables
+  ec2_vpc_route_table_info:
+    profile: "{{ rds_aws_profile }}"
+    region: "{{ aws_region }}"
+    filters:
+      vpc-id: "{{ rds_accept_vpc_id.vpcs[0].id }}"
+  register: rds_route_table
+
+- name: Gather information about k8s Internet Gateways
+  ec2_vpc_igw_info:
+    profile: "{{ rds_aws_profile }}"
+    region: "{{ aws_region }}"
+    filters:
+        "tag:Name": "{{ k8s_request_vpc_name }}"
+  register: k8s_igw_info
+
+# - debug: var=k8s_request_vpc_id
+# - debug: var=k8s_route_table
+# - debug: var=k8s_igw_info.internet_gateways[0].internet_gateway_id
+# - debug: var=rds_accept_vpc_id
+# - debug: var=rds_route_table
+
+- name: Create cross account VPC peering Connection
+  ec2_vpc_peer:
+    region: "{{ aws_region }}"
+    profile: "{{ prod_aws_profile }}"
+    vpc_id: "{{ k8s_request_vpc_id.vpcs[0].vpc_id }}"
+    peer_vpc_id: "{{ rds_accept_vpc_id.vpcs[0].vpc_id }}"
+    peer_owner_id: "{{ rds_accept_vpc_ower_id }}"
+    state: present
+    tags:
+      Name: Peering connection for VPC k8s to VPC rds
+  register: k8s_rds_vpc_peer_request
+
+- debug: var=k8s_rds_vpc_peer_request
+
+- name: Accept peering connection from remote account
+  ec2_vpc_peer:
+    region: "{{ aws_region }}"
+    profile: "{{ rds_aws_profile }}"
+    peering_id: "{{ k8s_rds_vpc_peer_request.peering_id }}"
+    state: accept
+  register: k8s_rds_vpc_peer_accept
+
+- name: Update the route table in the rds vpc
+  ec2_vpc_route_table:
+    state: present
+    lookup: id
+    route_table_id: "{{ rds_route_table.route_tables[0].id }}"
+    vpc_id: "{{ rds_accept_vpc_id.vpcs[0].id }}"
+    profile: "{{ rds_aws_profile }}"
+    region: "{{ aws_region }}"
+    routes:
+      - dest: "{{ k8s_request_vpc_id.vpcs[0].cidr_block }}"
+        # gateway_id: igw-07cfa3b85a05360bd
+        vpc_peering_connection_id: "{{ k8s_rds_vpc_peer_request.peering_id }}"
+  register: rds_route_table_updated
+
+# - name: Update the route table in the k8s vpc
+#   ec2_vpc_route_table:
+#     state: present
+#     lookup: id
+#     route_table_id: "{{ item.id }}"
+#     vpc_id: "{{ k8s_request_vpc_id.vpcs[0].id }}"
+#     profile: "{{ prod_aws_profile }}"
+#     region: "{{ aws_region }}"
+#     # routes:
+#     #   - dest: "{{ rds_accept_vpc_id.vpcs[0].cidr_block }}"
+#     #     # gateway_id: igw-07cfa3b85a05360bd
+#     #     vpc_peering_connection_id: "{{ k8s_rds_vpc_peer_request.peering_id }}"
+#     #   - dest: 0.0.0.0/0
+#     #     gateway_id: "{{ k8s_igw_info.internet_gateways[0].internet_gateway_id }}"
+#   with_items: "{{ k8s_route_table.route_tables }}"
+#   register: k8s_route_table_updated
+
+- name: add route for all k8s vpc route table
+  command: aws --region us-east-1 ec2 create-route --route-table-id {{ item.id }} --destination-cidr-block {{ rds_accept_vpc_id.vpcs[0].cidr_block }}  --vpc-peering-connection-id  {{ k8s_rds_vpc_peer_request.peering_id }}
+  with_items: "{{ k8s_route_table.route_tables }}"
+  environment:
+    AWS_PROFILE: "{{ prod_aws_profile }}"
+
+# - debug: var=k8s_route_table_updated

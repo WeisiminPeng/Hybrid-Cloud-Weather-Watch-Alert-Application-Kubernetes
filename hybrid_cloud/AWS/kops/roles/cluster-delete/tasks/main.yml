@@ -1,0 +1,9 @@
+---
+- name: Delete Cluster
+  shell:
+    kops delete cluster
+    --name={{NAME}}
+    --yes
+  environment:
+    AWS_PROFILE: "{{ AWS_PROFILE }}"
+    KOPS_STATE_STORE: "{{ KOPS_STATE_STORE }}"

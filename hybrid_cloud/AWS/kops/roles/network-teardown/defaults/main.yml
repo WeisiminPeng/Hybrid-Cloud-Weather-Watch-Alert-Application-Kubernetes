@@ -1,0 +1,6 @@
+---
+aws_region: us-east-1
+rds_aws_profile: test
+vpc_name: "rds-{{ aws_region}}-vpc"
+environment:
+    AWS_PROFILE: "{{ rds_aws_profile }}"

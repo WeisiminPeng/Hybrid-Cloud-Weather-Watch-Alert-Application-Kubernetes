@@ -1,0 +1,76 @@
+---
+- name: Learn facts about availability zone
+  aws_az_info:
+    region: "{{ AWS_REGION }}"
+    filters:
+      group_name: "{{ AWS_REGION }}"
+  environment:
+    AWS_PROFILE: "{{ AWS_PROFILE }}"
+  register: az
+
+# - debug: var=az
+
+- name: Build a list of availability zones
+  set_fact:
+    availability_zones: "{{ availability_zones }} + [ '{{ item.zone_name }}' ]"
+  with_items: "{{ az.availability_zones }}"
+  when: availability_zones|length < 3
+
+- name: Build a string of availability zones
+  set_fact:
+    zones_string: "{{ availability_zones | join(',') }}"
+
+# - name: Print the security group names to the console.
+#   debug: var=zones_string
+
+- name: Create Kubernetes Cluster
+  shell: 
+    kops create cluster 
+    --cloud=aws
+    --node-size "{{ COMPUTE_NODE_SIZE }}"
+    --master-size "{{ MASTER_NODE_SIZE }}"
+    --kubernetes-version="{{ VERSION }}" 
+    --zones "{{ zones_string }}"
+    --master-zones "{{ zones_string }}"
+    --node-count="{{ NODE_COUNT }}"
+    --dns public
+    --dns-zone "{{ DNS_ZONE }}"
+    --topology private
+    --networking calico
+    --ssh-public-key "{{ SSH_KEY }}"
+    --bastion="true"
+    --name={{NAME}}
+  environment:
+    AWS_PROFILE: "{{ AWS_PROFILE }}"
+    KOPS_STATE_STORE: "{{ KOPS_STATE_STORE }}"
+
+- name: Update Kubernetes Agent
+  shell: |
+    kops set cluster {{NAME}} spec.kubelet.authenticationTokenWebhook=true -v 1
+    kops set cluster {{NAME}} spec.kubelet.authorizationMode=Webhook -v 1
+  environment:
+    AWS_PROFILE: "{{ AWS_PROFILE }}"
+    KOPS_STATE_STORE: "{{ KOPS_STATE_STORE }}"
+    KOPS_FEATURE_FLAGS: "SpecOverrideFlag"
+
+# Start create the cluster
+- name: Update Cluster
+  shell:
+    kops update cluster
+    --name={{NAME}}
+    --yes
+  environment:
+    AWS_PROFILE: "{{ AWS_PROFILE }}"
+    KOPS_STATE_STORE: "{{ KOPS_STATE_STORE }}"
+
+# Wait until all the nodes are ready
+- name: Validate Cluster
+  shell: kops validate cluster --name={{NAME}} | grep "is ready" | wc -l
+  register: validate_result
+  until: validate_result.stdout.find('1') != -1
+  retries: 20
+  delay: 30
+  environment:
+    NAME: "{{ NAME }}"
+    AWS_PROFILE: "{{ AWS_PROFILE }}"
+    KOPS_STATE_STORE: "{{ KOPS_STATE_STORE }}"

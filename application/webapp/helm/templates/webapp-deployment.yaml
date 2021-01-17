@@ -1,0 +1,108 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: webapp-sa
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: webapp-sa
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: webapp-role
+  labels:
+    app: webapp-role
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  - namespaces
+  - secrets
+  verbs:
+  - get
+  - list
+  - watch
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: webapp-binding
+  namespace: {{ .Values.namespace }}
+roleRef:
+  kind: Role
+  name: webapp-role
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+- kind: ServiceAccount
+  name: webapp-sa
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-webapp-deployment
+spec:
+  replicas: {{ .Values.replicaCount }}
+  progressDeadlineSeconds: {{ .Values.progressDeadlineSeconds }}
+  minReadySeconds: {{ .Values.minReadySeconds }}
+  strategy:
+  {{- if eq .Values.strategyType "RollingUpdate" }}
+    rollingUpdate:
+      maxSurge: {{ .Values.maxSurge }}
+      maxUnavailable: {{ .Values.maxUnavailable }}
+  {{- end }}
+    # rollingUpdate:
+    #   maxSurge: {{ .Values.maxSurge }}
+    #   maxUnavailable: {{ .Values.maxUnavailable }}
+    type: {{ .Values.strategyType }}
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-webapp
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-webapp
+    spec:
+      serviceAccountName: webapp-sa
+      containers:
+      - image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        name: webapp
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+          - containerPort: 3000
+            protocol: TCP
+        env:
+          - name: DBhostname
+            value: {{ .Values.env.DBhostname }}
+          - name: DBusername
+            value: {{ .Values.env.DBusername }}
+          - name: DBpassword
+            value: {{ .Values.env.DBpassword }}
+          - name: DBname
+            value: {{ .Values.env.DBname }}
+          - name: KAFKAHOST
+            value: {{ .Values.env.KAFKAHOST }}
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 3000
+          initialDelaySeconds: {{ .Values.readinessInitialDelay }}
+          periodSeconds: {{ .Values.readinessPeriod }}
+        livenessProbe:
+          httpGet:
+            path: /live
+            port: 3000
+          initialDelaySeconds: {{ .Values.livenessInitialDelay }}
+          periodSeconds: {{ .Values.livenessPeriod }}
+        resources:
+          limits:
+            cpu: {{ .Values.resources.limits.cpu }}
+            memory: {{ .Values.resources.limits.memory }}
+          requests:
+            cpu: {{ .Values.resources.requests.cpu }}
+            memory: {{ .Values.resources.requests.memory }}
+      imagePullSecrets:
+          - name: dockerhubtoken-{{ .Release.Name }}
+

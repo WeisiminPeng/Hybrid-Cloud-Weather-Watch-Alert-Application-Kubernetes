@@ -1,0 +1,6 @@
+---
+# Default variable
+AWS_PROFILE: kops
+AWS_REGION: us-east-1
+NAME: none
+KOPS_STATE_STORE: "<s3 bucket>"

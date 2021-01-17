@@ -1,0 +1,30 @@
+---
+aws_region: us-east-1
+rds_aws_profile: test
+# vpc_name: "jenkins-{{ aws_region}}-vpc"
+vpc_name: "rds-{{ aws_region}}-vpc"
+prod_aws_profile: test_prod
+
+k8s_request_vpc_name: "k8s.prod.test.com"
+# vpc_cidr: 10.0.0.0/16
+# vpc_subnets:
+#   private-1:
+#     cidr: 10.0.1.0/24
+#     az: "{{ aws_region }}b"
+#   private-2:
+#     cidr: 10.0.2.0/24
+#     az: "{{ aws_region }}c"
+# keyName: aws_test
+username: cloud
+password: Mysql
+allocated_storage: 20
+# eip_address: 54.158.251.119
+
+# vpc_security_groups:
+  # - name: ssh
+  #   description: "Open SSH port 22"
+  #   rules:
+  #     - proto: tcp
+  #       cidr_ip: 0.0.0.0/0
+  #       ports:
+  #         - 22

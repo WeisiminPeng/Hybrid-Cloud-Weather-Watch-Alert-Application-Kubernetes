@@ -1,0 +1,20 @@
+.#*
+*~
+*#
+#*
+*.log
+*.tmp
+.DS_Store
+**/npm-cache
+/node_modules
+/tmp
+.idea/
+.vscode/
+.idea/workspace.xml
+dist/docs/
+/dist
+# exclude everything
+profile_imgs/*
+
+# exception to the rule
+!profile_imgs/placeholder.png 

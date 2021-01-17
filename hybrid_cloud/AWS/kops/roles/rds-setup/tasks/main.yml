@@ -1,0 +1,174 @@
+---
+
+# create RDS instance & subnet group & security group
+# in cluster-setup
+
+- name: Get VPC id
+  ec2_vpc_net_info:
+    profile: "{{ rds_aws_profile }}"
+    region: "{{ aws_region }}"
+    filters:
+      "tag:Name": "{{ vpc_name }}"
+      # "tag:Name": "{{ vpc_name }}"
+  register: rds_vpc_id
+
+- name: Get k8s VPC id
+  ec2_vpc_net_info:
+    profile: "{{ prod_aws_profile }}"
+    region: "{{ aws_region }}"
+    filters:
+      "tag:Name": "{{ k8s_request_vpc_name }}"
+  register: k8s_request_vpc_id
+
+# - debug: var=rds_vpc_id
+
+- name: Grab the route tables
+  ec2_vpc_route_table_info:
+    profile: "{{ rds_aws_profile }}"
+    region: "{{ aws_region }}"
+    filters:
+      vpc-id: "{{ rds_vpc_id.vpcs[0].id }}"
+  register: rds_route_table
+
+# - debug: var=rds_route_table
+
+
+- name: Grab the subnets
+  ec2_vpc_subnet_info:
+    profile: "{{ rds_aws_profile }}"
+    region: "{{ aws_region }}"
+    filters:
+      vpc-id: "{{ rds_vpc_id.vpcs[0].id }}"
+  register: rds_vpc_subnets
+
+# - debug: var=rds_vpc_subnets
+
+
+- name: Create rds security groups
+  ec2_group:
+    state: present
+    profile: "{{ rds_aws_profile}}"
+    region: "{{ aws_region }}"
+    vpc_id: "{{ rds_vpc_id.vpcs[0].id }}"
+    name: "RDS_sg_{{ rds_vpc_id.vpcs[0].id }}"
+    description: "RDS security group for {{ rds_vpc_id.vpcs[0].id }}"
+    tags: 
+      Name: "RDS_sg"
+    rules:
+      # - proto: tcp
+      #   from_port: 22
+      #   to_port: 22
+      #   cidr_ip: "{{ k8s_request_vpc_id.vpcs[0].cidr_block }}"
+      # - proto: tcp
+      #   from_port: 80
+      #   to_port: 80
+      #   cidr_ip: 0.0.0.0/0
+      - proto: tcp
+        from_port: 3306
+        to_port: 3306
+        # cidr_ip: 0.0.0.0/0
+        cidr_ip: "{{ k8s_request_vpc_id.vpcs[0].cidr_block }}"
+      # - proto: tcp
+      #   from_port: 8080
+      #   to_port: 8080
+      #   cidr_ip: 0.0.0.0/0
+  register: rds_sg
+
+# - debug: var=rds_sg
+
+- name: create rds subnet group
+  rds_subnet_group:
+    state: present
+    profile: "{{ rds_aws_profile}}"
+    region: "{{ aws_region }}"
+    name: rds_subnet_group
+    description: RDS subnet group for cloud-fa2020
+    subnets:
+      - "{{ rds_vpc_subnets.subnets[0].id }}"
+      - "{{ rds_vpc_subnets.subnets[1].id }}"
+  register: rds_subnet_group
+
+# - debug: var=rds_subnet_group
+
+
+# - debug: var=rds_vpc_subnets.subnets[0].id
+# - debug: var=rds_vpc_subnets.subnets[1].id
+
+- name: Create a webapp DB instance using the default AWS KMS encryption key
+  rds_instance:
+    id: cloud-fa2020-webapp
+    profile: "{{ rds_aws_profile}}"
+    region: "{{ aws_region }}"
+    db_name: webappdb
+    state: present
+    engine: mysql
+    #storage_encrypted: yes
+    storage_type: gp2
+    db_instance_class: db.t2.micro
+    username: "{{ username }}"
+    password: "{{ password }}"
+    allocated_storage: "{{ allocated_storage }}"
+    # db_security_groups: "RDS_sg"
+    vpc_security_group_ids: "{{ rds_sg.group_id }}"
+    db_subnet_group_name: rds_subnet_group
+    #enable_performance_insights: yes
+    multi_az: no
+    publicly_accessible: no
+    skip_final_snapshot: yes
+    tags: 
+      Name: "RDS_instance_webapp"
+  register: rds_inatance_webapp
+
+- name: Create a poller DB instance using the default AWS KMS encryption key
+  rds_instance:
+    id: cloud-fa2020-poller
+    profile: "{{ rds_aws_profile}}"
+    region: "{{ aws_region }}"
+    db_name: pollerdb
+    state: present
+    engine: mysql
+    #storage_encrypted: yes
+    storage_type: gp2
+    db_instance_class: db.t2.micro
+    username: "{{ username }}"
+    password: "{{ password }}"
+    allocated_storage: "{{ allocated_storage }}"
+    # db_security_groups: "RDS_sg"
+    vpc_security_group_ids: "{{ rds_sg.group_id }}"
+    db_subnet_group_name: rds_subnet_group
+    #enable_performance_insights: yes
+    multi_az: no
+    publicly_accessible: no
+    skip_final_snapshot: yes
+    tags: 
+      Name: "RDS_instance_poller"
+  register: rds_inatance_poller
+
+- name: Create a notifier DB instance using the default AWS KMS encryption key
+  rds_instance:
+    id: cloud-fa2020-notifier
+    profile: "{{ rds_aws_profile}}"
+    region: "{{ aws_region }}"
+    db_name: notifierdb
+    state: present
+    engine: mysql
+    #storage_encrypted: yes
+    storage_type: gp2
+    db_instance_class: db.t2.micro
+    username: "{{ username }}"
+    password: "{{ password }}"
+    allocated_storage: "{{ allocated_storage }}"
+    # db_security_groups: "RDS_sg"
+    vpc_security_group_ids: "{{ rds_sg.group_id }}"
+    db_subnet_group_name: rds_subnet_group
+    #enable_performance_insights: yes
+    multi_az: no
+    publicly_accessible: no
+    skip_final_snapshot: yes
+    tags: 
+      Name: "RDS_instance_notifier"
+  register: rds_inatance_notifier
+
+
+
+

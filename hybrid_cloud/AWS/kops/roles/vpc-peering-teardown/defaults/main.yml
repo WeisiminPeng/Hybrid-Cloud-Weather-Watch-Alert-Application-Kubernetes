@@ -1,0 +1,7 @@
+---
+aws_region: us-east-1
+rds_aws_profile: test_rds
+prod_aws_profile: test_prod
+
+k8s_request_vpc_name: "k8s.prod.test.com"
+rds_accept_vpc_name: "rds-{{ aws_region}}-vpc"

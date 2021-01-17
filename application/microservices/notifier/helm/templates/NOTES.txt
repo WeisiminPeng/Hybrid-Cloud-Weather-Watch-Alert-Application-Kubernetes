@@ -1,0 +1,21 @@
+Thank you for installing poller.
+
+Your release is named {{ .Release.Name }}.
+
+To learn more about the release, try:
+
+  $ helm status {{ .Release.Name }}
+  $ helm get all {{ .Release.Name }}
+
+To run deploy the release: 
+
+  $ helm install \
+    --set dockerhubToken=<Your dockenhub token> \
+    --set env.DBhostname=<Database endpoint> \
+    --set env.KAFKAHOST=<Kafka host> \
+    --set image.repository=<Dockerhub repository> \
+    --set image.tag=<Image tag> \
+    <release name> ./helm
+
+To run uninstall the release: 
+  $ helm uninstall <release name>

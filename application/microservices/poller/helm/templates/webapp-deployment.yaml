@@ -1,0 +1,110 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: poller-sa
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: poller-sa
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: poller-role
+  labels:
+    app: poller-role
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  - namespaces
+  - secrets
+  verbs:
+  - get
+  - list
+  - watch
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: poller-binding
+  namespace: {{ .Values.namespace }}
+roleRef:
+  kind: Role
+  name: poller-role
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+- kind: ServiceAccount
+  name: poller-sa
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-poller-deployment
+spec:
+  replicas: {{ .Values.replicaCount }}
+  progressDeadlineSeconds: {{ .Values.progressDeadlineSeconds }}
+  minReadySeconds: {{ .Values.minReadySeconds }}
+  strategy:
+  {{- if eq .Values.strategyType "RollingUpdate" }}
+    rollingUpdate:
+      maxSurge: {{ .Values.maxSurge }}
+      maxUnavailable: {{ .Values.maxUnavailable }}
+  {{- end }}
+    # rollingUpdate:
+    #   maxSurge: {{ .Values.maxSurge }}
+    #   maxUnavailable: {{ .Values.maxUnavailable }}
+    type: {{ .Values.strategyType }}
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-poller
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-poller
+    spec:
+      serviceAccountName: poller-sa
+      containers:
+      - image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        name: poller
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+          - containerPort: 8080
+            protocol: TCP
+        env:
+          - name: DBhostname
+            value: {{ .Values.env.DBhostname }}
+          - name: DBusername
+            value: {{ .Values.env.DBusername }}
+          - name: DBpassword
+            value: {{ .Values.env.DBpassword }}
+          - name: DBname
+            value: {{ .Values.env.DBname }}
+          - name: KAFKAHOST
+            value: {{ .Values.env.KAFKAHOST }}
+          - name: POLL_INTERVAL
+            value: "{{ .Values.env.POLL_INTERVAL }}"
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: {{ .Values.readinessInitialDelay }}
+          periodSeconds: {{ .Values.readinessPeriod }}
+        livenessProbe:
+          httpGet:
+            path: /live
+            port: 8080
+          initialDelaySeconds: {{ .Values.livenessInitialDelay }}
+          periodSeconds: {{ .Values.livenessPeriod }}
+        resources:
+          limits:
+            cpu: {{ .Values.resources.limits.cpu }}
+            memory: {{ .Values.resources.limits.memory }}
+          requests:
+            cpu: {{ .Values.resources.requests.cpu }}
+            memory: {{ .Values.resources.requests.memory }}
+      imagePullSecrets:
+          - name: dockerhubtoken-{{ .Release.Name }}
+

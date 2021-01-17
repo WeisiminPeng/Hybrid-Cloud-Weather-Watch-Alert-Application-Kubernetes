@@ -1,0 +1,9 @@
+---
+- name: "Delete Kubernetes Cluster"
+  hosts: localhost
+  gather_facts: no
+  roles:
+  - vpc-peering-teardown
+  - rds-teardown
+  - network-teardown
+  - cluster-delete

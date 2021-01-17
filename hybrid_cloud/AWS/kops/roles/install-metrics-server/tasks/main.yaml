@@ -1,0 +1,6 @@
+---
+- name: Install Metrics Server
+  shell: kubectl apply -f components.yaml
+  environment:
+    AWS_PROFILE: "{{ AWS_PROFILE }}"
+    KOPS_STATE_STORE: "{{ KOPS_STATE_STORE }}"

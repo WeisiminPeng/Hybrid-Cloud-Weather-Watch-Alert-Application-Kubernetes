@@ -1,0 +1,10 @@
+---
+- name: "Set up Kubernetes Cluster"
+  hosts: localhost
+  gather_facts: no
+  roles:
+  - cluster-setup
+  - install-metrics-server
+  - network-setup
+  - rds-setup
+  - vpc-peering-setup

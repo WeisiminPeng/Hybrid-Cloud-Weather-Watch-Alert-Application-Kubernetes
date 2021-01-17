@@ -1,0 +1,47 @@
+---
+- name: "Gather rds instance facts"
+  rds_instance_info:
+    profile: "{{ rds_aws_profile}}"
+    region: "{{ aws_region }}"
+    db_instance_identifier: cloud-fa2020-webapp
+  register: rds_instance_facts
+
+# - debug: var=rds_instance_facts
+
+- name: remove the webapp DB instance without a final snapshot
+  rds_instance:
+    profile: "{{ rds_aws_profile}}"
+    region: "{{ aws_region }}"
+    id: cloud-fa2020-webapp
+    state: absent
+    skip_final_snapshot: True
+
+- name: remove the poller DB instance without a final snapshot
+  rds_instance:
+    profile: "{{ rds_aws_profile}}"
+    region: "{{ aws_region }}"
+    id: cloud-fa2020-poller
+    state: absent
+    skip_final_snapshot: True
+
+- name: remove the notifier DB instance without a final snapshot
+  rds_instance:
+    profile: "{{ rds_aws_profile}}"
+    region: "{{ aws_region }}"
+    id: cloud-fa2020-notifier
+    state: absent
+    skip_final_snapshot: True
+
+- name: "Delete group by its id"
+  ec2_group:
+    profile: "{{ rds_aws_profile}}"
+    region: "{{ aws_region }}"
+    group_id: "{{ rds_instance_facts.instances[0].vpc_security_groups[0].vpc_security_group_id }}"
+    state: absent
+
+- name: Remove a subnet group
+  rds_subnet_group:
+    profile: "{{ rds_aws_profile}}"
+    region: "{{ aws_region }}"
+    state: absent
+    name: rds_subnet_group
